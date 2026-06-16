@@ -10,18 +10,18 @@ cfcs_simulation <- function(seed.number, N, nitem){
 
   item <- matrix(
     c(
-      0.61, -0.48,  8.79,
-      0.65, -0.11,  4.85,
-      0.86, -0.24,  9.56,
-      0.82, -0.24,  7.51,
-      0.45,  0.33,  4.96,
-      0.57, -0.42,  6.05,
-      0.53, -0.63,  5.65,
-      0.48, -0.41,  5.61,
-      0.68, -0.35,  5.45,
-      0.72, -0.34,  7.75,
-      0.88, -0.28, 11.35,
-      0.50, -0.04,  6.28
+       0.73, -0.61, 5.96,
+       0.70, -0.15, 4.00,
+       0.96, -0.27, 7.60,
+       0.89, -0.26, 6.10,
+       0.50,  0.38, 3.68,
+       0.64, -0.48, 4.64,
+       0.58, -0.72, 4.37,
+       0.49, -0.45, 5.32,
+       0.73, -0.34, 4.39,
+       0.80, -0.35, 6.00,
+       0.98, -0.29, 8.91,
+       0.52, -0.03, 5.59
     ),
     ncol = 3,
     byrow = TRUE
@@ -32,7 +32,7 @@ cfcs_simulation <- function(seed.number, N, nitem){
 
   thresholds <- list()
   thresholds[[1]] <- c(0.2, 0.4, 0.6, 0.8)
-  thresholds[[2]] <- c(0.22, 0.45, 0.55, 0.78)
+  thresholds[[2]] <- c(0.21, 0.43, 0.54, 0.80)
 
   data <- matrix(nrow = N, ncol = nitem)
   set.seed(seed.number)
@@ -63,12 +63,14 @@ cfcs_simulation <- function(seed.number, N, nitem){
 n_rep <- 100
 
 outcome_measures <- c()
-
+model_selection_results <- c()
 for(N in c(500, 1000)){
   for(n_item in c(12, 24, 48)){
     {
       results <- list()
       bias1 <- bias2 <- rmse1 <- rmse2 <- 0
+      
+      model_selection_AIC_BIC <- matrix(nrow = n_rep, ncol = 2)
       
       for(i in 1:n_rep){
         # data generation
@@ -83,6 +85,7 @@ for(N in c(500, 1000)){
         )
         
         #  run analysis
+        # Model 1: unrestricted model
         fit <- efa_sim(data = data,
                        dimension = 1,
                        max_iter = 200,
@@ -90,15 +93,76 @@ for(N in c(500, 1000)){
                        ngrid = 4000
         )
         
+        # Model 2: equal to equal
+        model_formula <- paste("f1", paste(colnames(data), collapse = " + "), sep = " ~ ")
+        
+        item_names <- paste0("q", 1:(n_item/2))
+        
+        formula_string <- paste0(
+          model_formula,"\n",
+          paste(
+            unlist(
+              lapply(item_names, function(item) {
+                sprintf("%s.t%d <- 0", item, 1:4)
+              })
+            ),
+            collapse = "\n"
+          ),
+          collapse = "")
+        
+        fit1 <- cfa_sim(formula = formula_string,
+                       data = data,
+                       max_iter = 200,
+                       t_prior = t_sd,
+                       ngrid = 4000
+        )
+        
+        # Model 3: unequal to equal
+        item_names <- setdiff(colnames(data), item_names)
+        
+        formula_string <- paste0(
+          model_formula,"\n",
+          paste(
+            unlist(
+              lapply(item_names, function(item) {
+                sprintf("%s.t%d <- 0", item, 1:4)
+              })
+            ),
+            collapse = "\n"
+          ),
+          collapse = "")
+        
+        fit2 <- cfa_sim(formula = formula_string,
+                        data = data,
+                        max_iter = 200,
+                        t_prior = t_sd,
+                        ngrid = 4000
+        )
+        
+        
         results[[i]] <- fit$par_est
         cat("\n", i,"\n")
+        
+        # Model selection
+        # 0: the restricted model is preferred
+        # 1: disagreement between AIC and BIC
+        # 2: the unrestricted model is preferred
+        AIC_ <- (fit1$AIC > fit$AIC)
+        BIC_ <- (fit1$BIC > fit$BIC)
+        
+        model_selection_AIC_BIC[i,1] <- AIC_ + BIC_
+        
+        AIC_ <- (fit2$AIC > fit$AIC)
+        BIC_ <- (fit2$BIC > fit$BIC)
+        
+        model_selection_AIC_BIC[i,2] <- AIC_ + BIC_
         
         # BIAS & RMSE
         item <- dataset$item
         
         thresholds <- list()
         thresholds[[1]] <- c(0.2, 0.4, 0.6, 0.8)
-        thresholds[[2]] <- c(0.22, 0.45, 0.55, 0.78)
+        thresholds[[2]] <- c(0.21, 0.43, 0.54, 0.80)
         
         item_par <- cbind(
           item[,1:2],
@@ -140,6 +204,17 @@ for(N in c(500, 1000)){
                 formatC(rmse2, format="f", digits=3, flag=""),
                 ")",
                 sep = "")
+        )
+      )
+      model_selection_results <- rbind(
+        model_selection_results,
+        c(
+          sum(model_selection_AIC_BIC[,1] == 0),
+          sum(model_selection_AIC_BIC[,1] == 1),
+          sum(model_selection_AIC_BIC[,1] == 2),
+          sum(model_selection_AIC_BIC[,2] == 0),
+          sum(model_selection_AIC_BIC[,2] == 1),
+          sum(model_selection_AIC_BIC[,2] == 2)
         )
       )
     }

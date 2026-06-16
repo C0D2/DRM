@@ -937,8 +937,10 @@ Mstep_sim <- function(E, item, par_id=NULL, grouping=NULL, ngrid = 1000,
     if(length(current_t) != 0){
       for(i in 1:nrow(partial_id)){
         index <- partial_id[i,]
-        J <- jac_soft(item[[2]][i,-1])
-        se_delta[index,index] <- J %*% se[index,index] %*% t(J)
+        if(all(!is.na(index))){
+          J <- jac_soft(item[[2]][i,-1])
+          se_delta[index,index] <- J %*% se[index,index] %*% t(J)
+        }
       }
     }
     suppressWarnings({
@@ -1339,7 +1341,7 @@ dr_sim <- function(data, dimension=NULL, range=c(-4,4), q=11, t_prior=0.25, init
            l_prior_w=l_prior_w,
            logL= logL,
            AIC= -2*logL+2*eff_par_c,
-           BIC= -2*logL+log(mean(colSums(!is.na(data))))*eff_par,
+           BIC= -2*logL+log(mean(colSums(!is.na(data))))*eff_par_c,
            ICOMP= ICOMP(logL, M$inv_H_raw),
            f_means=factor_means,
            cov_mat = f_cov,
